@@ -139,8 +139,9 @@ if run:
             efectividad = ((initial_pop - N[-1]) / initial_pop) * 100
             st.metric("Reducción Estimada", f"{efectividad:.1f}%")
 
-        st.info(f"**Criterio técnico:** Se considera la plaga bajo control cuando la población desciende de {int(collapse_threshold)} ind/m².")
+        st.info(f"**Criterio técnico:** Se considera riesgo potencial de recuperación y propagación poblacional cuando la población desciende de {int(collapse_threshold)} ind/m².")
 
 else:
     st.info("💡 Ajusta los valores en el panel izquierdo y presiona el botón para ver la proyección.")
     
+
