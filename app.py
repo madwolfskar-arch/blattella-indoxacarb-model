@@ -20,34 +20,26 @@ st.subheader("Control con indoxacarb – ZODION Servicios Ambientales")
 
 st.markdown(
     """
-    Esta aplicación simula la **dinámica poblacional funcional**
-    de *Blattella germanica* bajo tratamiento con indoxacarb,
+    Esta aplicación simula la **dinámica poblacional funcional** de *Blattella germanica* bajo tratamiento con indoxacarb, 
     considerando condiciones ambientales e inmigración diaria.
     """
 )
 
 # =========================================================
-# FACTOR AMBIENTAL
+# FACTOR AMBIENTAL (Función Biológica)
 # =========================================================
 def environmental_factor(temp, humidity):
+    # La temperatura óptima es 30°C, la humedad óptima 70%
     temp_factor = max(0, 1 - abs(temp - 30) / 20)
     hum_factor = max(0, 1 - abs(humidity - 70) / 40)
     return temp_factor * hum_factor
 
 # =========================================================
-# MODELO POBLACIONAL
+# MODELO POBLACIONAL (Motor de cálculo)
 # =========================================================
-def simulate_population(
-    days,
-    initial_pop,
-    temp,
-    humidity,
-    immigration
-):
-
+def simulate_population(days, initial_pop, temp, humidity, immigration):
     birth_rate = 0.06
     natural_mortality = 0.01
-
     palatability = 0.95
     stop_feed_delay = 2
     lethal_delay = 4
@@ -63,7 +55,6 @@ def simulate_population(
     intox_history = np.zeros(days)
 
     for d in range(1, days):
-
         new_intox = palatability * S[d-1]
         intox_history[d] = new_intox
 
@@ -82,7 +73,7 @@ def simulate_population(
     return N_active
 
 # =========================================================
-# BARRA LATERAL — CONTROLES
+# BARRA LATERAL — PARÁMETROS
 # =========================================================
 st.sidebar.header("⚙️ Parámetros de simulación")
 
@@ -96,74 +87,60 @@ immigration = st.sidebar.number_input(
 )
 days = st.sidebar.slider("Días de simulación", 10, 180, 60)
 
-run = st.sidebar.button("▶ Ejecutar simulación")
+# =========================================================
+# CUERPO PRINCIPAL — BOTÓN Y RESULTADOS
+# =========================================================
+st.divider()
+run = st.button("🚀 Iniciar Simulación", use_container_width=True)
 
-# =========================================================
-# EJECUCIÓN
-# =========================================================
 if run:
+    with st.spinner('Calculando dinámica poblacional...'):
+        N = simulate_population(
+            days, 
+            initial_pop, 
+            temp, 
+            humidity, 
+            immigration
+        )
 
-    N = simulate_population(
-        days,
-        initial_pop,
-        temp,
-        humidity,
-        immigration
-    )
+        collapse_threshold = initial_pop * 0.05
+        days_axis = np.arange(days)
 
-    collapse_threshold = initial_pop * 0.05
-    days_axis = np.arange(days)
+        st.success("Simulación completada ✅")
 
-    st.success("Simulación ejecutada correctamente ✅")
+        # --- GRÁFICA ---
+        fig, ax = plt.subplots(figsize=(10, 5))
+        
+        ax.axhspan(
+            0, collapse_threshold, 
+            facecolor="lightcoral", alpha=0.3, 
+            label="Colonia eliminada (<5%)"
+        )
+        
+        ax.plot(
+            days_axis, N, 
+            linewidth=3, color="#1f77b4", 
+            label="Población funcional activa"
+        )
 
-    # =====================================================
-    # GRÁFICA
-    # =====================================================
-    fig, ax = plt.subplots(figsize=(10, 5))
+        ax.set_xlabel("Días de tratamiento")
+        ax.set_ylabel("Individuos activos / m²")
+        ax.set_title("Efectividad del control con Indoxacarb")
+        ax.legend()
+        ax.grid(True, linestyle='--', alpha=0.7)
 
-    ax.axhspan(
-        collapse_threshold, initial_pop,
-        facecolor="lightblue", alpha=0.4,
-        label="Plaga activa"
-    )
+        st.pyplot(fig)
 
-    ax.axhspan(
-        0, collapse_threshold,
-        facecolor="lightcoral", alpha=0.5,
-        label="Colonia funcionalmente eliminada"
-    )
+        # --- INTERPRETACIÓN ---
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Población Final", f"{int(N[-1])} ind/m²")
+        with col2:
+            efectividad = ((initial_pop - N[-1]) / initial_pop) * 100
+            st.metric("Reducción Estimada", f"{efectividad:.1f}%")
 
-    ax.plot(
-        days_axis, N,
-        linewidth=3, color="navy",
-        label="Población funcional activa"
-    )
-
-    ax.set_xlabel("Días de tratamiento")
-    ax.set_ylabel("Individuos activos / m²")
-    ax.set_title("Efectividad del control con indoxacarb")
-    ax.legend()
-    ax.grid(True)
-
-    st.pyplot(fig)
-
-    # =====================================================
-    # INTERPRETACIÓN
-    # =====================================================
-    st.markdown("### 📌 Interpretación técnica")
-
-    st.markdown(
-        f"""
-        - **Población inicial:** {initial_pop} ind/m²  
-        - **Población activa final:** {int(N[-1])} ind/m²  
-        - **Criterio de control:** < 5% de la población inicial  
-
-        Este modelo representa la **población funcional real**
-        capaz de sostener la infestación.
-        """
-    )
+        st.info(f"**Criterio técnico:** Se considera la plaga bajo control cuando la población desciende de {int(collapse_threshold)} ind/m².")
 
 else:
-    st.info("⬅️ Ajusta los parámetros y presiona **Ejecutar simulación**")
-
-
+    st.info("💡 Ajusta los valores en el panel izquierdo y presiona el botón para ver la proyección.")
+    
