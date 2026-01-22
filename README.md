@@ -21,4 +21,5 @@ El simulador considera variables críticas como:
 * **Zona Roja (Eliminada):** Se alcanza cuando la población cae por debajo del 5% del nivel inicial, indicando éxito en el tratamiento.
 
 ---
-**Desarrollado por:** *ZODION Servicios Ambientales* *Expertos en gestión de plagas basada en ciencia y datos.*
+**Desarrollado por:** *ZODION Servicios Ambientales* *Expertos en gestión de saneamiento ambiental basada en ciencia y datos.*
+
