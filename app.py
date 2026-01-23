@@ -1,191 +1,215 @@
-# =========================================================
-# MODELO POBLACIONAL Blattella germanica – Indoxacarb
-# Versión corregida, escalable y bio-realista
-# ZODION Servicios Ambientales
-# =========================================================
-
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 
-# =========================================================
-# CONFIGURACIÓN STREAMLIT
-# =========================================================
+# --------------------------------------------------
+# CONFIGURACIÓN GENERAL
+# --------------------------------------------------
 st.set_page_config(
-    page_title="Modelo Blattella germanica – Indoxacarb",
-    layout="centered"
+    page_title="Modelo poblacional Blattella germanica – Indoxacarb",
+    layout="wide"
 )
 
-st.title("Modelo poblacional de Blattella germanica")
-st.subheader("Control con indoxacarb – Enfoque bio-realista")
-st.caption("Desarrollado por ZODION Servicios Ambientales")
+st.title("🪳 Modelo poblacional de Blattella germanica")
+st.caption(
+    "Simulación ecológica del control poblacional con indoxacarb\n"
+    "Desarrollado bajo criterios biológicos y de campo – ZODION Servicios Ambientales"
+)
 
-# =========================================================
-# FACTOR AMBIENTAL
-# =========================================================
-def environmental_factor(temp, humidity):
-    temp_factor = max(0, 1 - abs(temp - 30) / 20)
-    hum_factor = max(0, 1 - abs(humidity - 70) / 40)
-    return temp_factor * hum_factor
+# --------------------------------------------------
+# FUNCIONES ECOLÓGICAS
+# --------------------------------------------------
+
+def factor_temperatura(T):
+    if T < 10:
+        return 0.0
+    elif 10 <= T < 25:
+        return (T - 10) / 15
+    elif 25 <= T <= 33:
+        return 1.0
+    elif 33 < T <= 38:
+        return max(0.2, 1 - (T - 33) / 5)
+    else:
+        return 0.0
 
 
-# =========================================================
-# MODELO POBLACIONAL CORREGIDO
-# =========================================================
-def simulate_population(
-    days,
-    initial_pop,
-    temp,
-    humidity,
-    reinfestation_rate
+def factor_humedad(H):
+    if H < 30:
+        return 0.1
+    elif 30 <= H <= 70:
+        return 1.0
+    else:
+        return max(0.3, 1 - (H - 70) / 30)
+
+
+# --------------------------------------------------
+# SIMULACIÓN PRINCIPAL
+# --------------------------------------------------
+
+def simular_poblacion(
+    dias,
+    ninfas_inicial,
+    adultos_inicial,
+    temperatura,
+    humedad,
+    intensidad_tratamiento
 ):
 
-    # --- Parámetros biológicos ---
-    birth_rate = 0.04            # reproducción diaria efectiva
-    natural_mortality = 0.01     # mortalidad natural
-    exposure_rate = 0.05         # % máximo expuesto por día
-    saturation_alpha = 0.75      # saturación del consumo
+    N = np.zeros(dias)
+    A = np.zeros(dias)
+    R = np.zeros(dias)
 
-    stop_feed_delay = 2          # días (48h)
-    lethal_delay = 4             # días (96h)
+    N[0] = ninfas_inicial
+    A[0] = adultos_inicial
+    R[0] = 1.0  # recursos iniciales normalizados
 
-    env = environmental_factor(temp, humidity)
+    fT = factor_temperatura(temperatura)
+    fH = factor_humedad(humedad)
 
-    # --- Compartimentos ---
-    S = np.zeros(days)   # Susceptibles
-    I1 = np.zeros(days)  # Intoxicados tempranos
-    I2 = np.zeros(days)  # Intoxicados tardíos
-    D = np.zeros(days)   # Muertos acumulados
+    for t in range(dias - 1):
 
-    S[0] = initial_pop
-    intox_history = np.zeros(days)
+        poblacion_total = N[t] + A[t]
+        if poblacion_total < 1:
+            break
 
-    for d in range(1, days):
+        # ------------------------------
+        # REPRODUCCIÓN (limitada)
+        # ------------------------------
+        tasa_reproductiva_diaria = 0.002  # equivalente biológico estable
+        ninfas_nuevas = (
+            A[t]
+            * tasa_reproductiva_diaria
+            * fT
+            * fH
+            * R[t]
+        )
 
-        # ---- Saturación de ingestión ----
-        max_exposed = exposure_rate * (S[d-1] ** saturation_alpha)
-        new_intox = min(max_exposed, S[d-1])
-        intox_history[d] = new_intox
+        # ------------------------------
+        # MORTALIDAD POR INDOXACARB
+        # ------------------------------
+        efecto_gregario = np.log(1 + poblacion_total)
+        mortalidad_indox_ninfas = intensidad_tratamiento * 0.015 * efecto_gregario
+        mortalidad_indox_adultos = intensidad_tratamiento * 0.010 * efecto_gregario
 
-        # ---- Reproducción ----
-        births = S[d-1] * birth_rate * env
+        # ------------------------------
+        # MORTALIDAD NATURAL
+        # ------------------------------
+        mortalidad_nat_ninfas = 0.008
+        mortalidad_nat_adultos = 0.005
 
-        # ---- Mortalidad natural ----
-        natural_deaths = S[d-1] * natural_mortality
+        # ------------------------------
+        # TRANSICIÓN NINFA → ADULTO
+        # ------------------------------
+        tasa_maduracion = 0.02
+        nuevos_adultos = N[t] * tasa_maduracion
 
-        # ---- Transiciones metabólicas ----
-        to_I2 = intox_history[d - stop_feed_delay] if d >= stop_feed_delay else 0
-        toxic_deaths = intox_history[d - lethal_delay] if d >= lethal_delay else 0
+        # ------------------------------
+        # ACTUALIZACIÓN POBLACIONAL
+        # ------------------------------
+        N[t + 1] = max(
+            0,
+            N[t]
+            + ninfas_nuevas
+            - (mortalidad_indox_ninfas + mortalidad_nat_ninfas) * N[t]
+            - nuevos_adultos
+        )
 
-        # ---- Reinfestación condicionada ----
-        if S[d-1] < 25:
-            immigration = reinfestation_rate * S[d-1]
-        else:
-            immigration = 0
+        A[t + 1] = max(
+            0,
+            A[t]
+            + nuevos_adultos
+            - (mortalidad_indox_adultos + mortalidad_nat_adultos) * A[t]
+        )
 
-        # ---- Actualización ----
-        S[d] = max(0, S[d-1] + births - new_intox - natural_deaths + immigration)
-        I1[d] = max(0, I1[d-1] + new_intox - to_I2)
-        I2[d] = max(0, I2[d-1] + to_I2 - toxic_deaths)
-        D[d] = D[d-1] + toxic_deaths
+        # ------------------------------
+        # CONSUMO DE RECURSOS
+        # ------------------------------
+        consumo = 0.0000015 * A[t] + 0.0000008 * N[t]
+        R[t + 1] = max(0, R[t] - consumo)
 
-    N_active = S + I1
-
-    return N_active, S, I1, I2, D
+    return N, A, R
 
 
-# =========================================================
-# INTERFAZ DE ENTRADA
-# =========================================================
-st.sidebar.header("Parámetros de simulación")
+# --------------------------------------------------
+# INTERFAZ STREAMLIT
+# --------------------------------------------------
 
-temp = st.sidebar.slider("Temperatura (°C)", 15, 40, 30)
-humidity = st.sidebar.slider("Humedad relativa (%)", 30, 90, 70)
-initial_pop = st.sidebar.number_input(
-    "Población inicial (ind/m²)",
-    min_value=1,
+st.sidebar.header("🔧 Parámetros del escenario")
+
+ninfas_inicial = st.sidebar.number_input(
+    "Ninfas iniciales",
+    min_value=0,
     max_value=1_000_000,
-    value=500,
-    step=100
+    value=500
 )
-reinfestation_rate = st.sidebar.slider(
-    "Tasa de reinfestación",
-    0.000, 0.01, 0.002,
-    help="Activada solo cuando la población es crítica"
+
+adultos_inicial = st.sidebar.number_input(
+    "Adultos iniciales",
+    min_value=0,
+    max_value=1_000_000,
+    value=200
 )
-days = st.sidebar.slider("Días de simulación", 30, 180, 60)
 
-run = st.sidebar.button("Ejecutar simulación")
+temperatura = st.sidebar.slider(
+    "Temperatura (°C)",
+    min_value=5,
+    max_value=38,
+    value=28
+)
 
-# =========================================================
-# EJECUCIÓN Y VISUALIZACIÓN
-# =========================================================
-if run:
+humedad = st.sidebar.slider(
+    "Humedad relativa (%)",
+    min_value=10,
+    max_value=90,
+    value=60
+)
 
-    N, S, I1, I2, D = simulate_population(
-        days,
-        initial_pop,
-        temp,
-        humidity,
-        reinfestation_rate
+intensidad = st.sidebar.slider(
+    "Intensidad del tratamiento (indoxacarb)",
+    min_value=0.1,
+    max_value=1.0,
+    value=0.8
+)
+
+dias = st.sidebar.slider(
+    "Duración del tratamiento (días)",
+    min_value=30,
+    max_value=240,
+    value=120
+)
+
+# --------------------------------------------------
+# EJECUCIÓN
+# --------------------------------------------------
+
+if st.sidebar.button("▶ Ejecutar simulación"):
+
+    N, A, R = simular_poblacion(
+        dias,
+        ninfas_inicial,
+        adultos_inicial,
+        temperatura,
+        humedad,
+        intensidad
     )
 
-    days_axis = np.arange(days)
+    t = np.arange(dias)
 
-    # --- Umbrales técnicos ---
-    elimination_threshold = 5
-    risk_threshold = 25
-
-    # --- Gráfico ---
     fig, ax = plt.subplots(figsize=(10, 5))
-
-    ax.axhspan(
-        risk_threshold, initial_pop,
-        color="lightblue", alpha=0.3,
-        label="Plaga activa"
-    )
-    ax.axhspan(
-        elimination_threshold, risk_threshold,
-        color="khaki", alpha=0.4,
-        label="Riesgo de recuperación"
-    )
-    ax.axhspan(
-        0, elimination_threshold,
-        color="lightcoral", alpha=0.5,
-        label="Colonia funcionalmente eliminada"
-    )
-
-    ax.plot(
-        days_axis, N,
-        color="navy", linewidth=3,
-        label="Población funcional activa"
-    )
-
-    ax.set_xlabel("Días de tratamiento")
-    ax.set_ylabel("Individuos activos / m²")
-    ax.set_title("Dinámica poblacional bajo tratamiento con indoxacarb")
+    ax.plot(t, N, label="Ninfas", linewidth=2)
+    ax.plot(t, A, label="Adultos", linewidth=2)
+    ax.set_xlabel("Días")
+    ax.set_ylabel("Individuos")
+    ax.set_title("Dinámica poblacional de Blattella germanica")
     ax.legend()
     ax.grid(True)
 
     st.pyplot(fig)
 
-    # --- Indicadores claros ---
-    final_pop = int(N[-1])
-
-    st.subheader("Resultados clave")
-
-    st.write(f"**Población inicial:** {initial_pop} ind/m²")
-    st.write(f"**Población activa final:** {final_pop} ind/m²")
-
-    if final_pop < elimination_threshold:
-        st.success("Colonia funcionalmente eliminada")
-    elif final_pop < risk_threshold:
-        st.warning("Control parcial – Riesgo de recuperación")
+    if N[-1] + A[-1] < 1:
+        st.success("✅ Control poblacional completo logrado")
+    elif R[-1] < 0.1:
+        st.warning("⚠️ Recursos agotados – riesgo bajo de recuperación")
     else:
-        st.error("Actividad activa – Tratamiento insuficiente")
-
-    st.caption(
-        "Criterios técnicos basados en biología reproductiva de Blattella germanica. "
-        "Una sola hembra fértil puede reiniciar la infestación."
-    )
+        st.info("ℹ️ Población controlada pero aún activa")
 
