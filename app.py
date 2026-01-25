@@ -181,7 +181,6 @@ dias = st.sidebar.slider(
 # --------------------------------------------------
 # EJECUCIÓN
 # --------------------------------------------------
-
 if st.sidebar.button("▶ Ejecutar simulación"):
 
     N, A, R = simular_poblacion(
@@ -206,30 +205,34 @@ if st.sidebar.button("▶ Ejecutar simulación"):
 
     st.pyplot(fig)
 
+    # --------------------------------------------------
+    # EVALUACIÓN CUANTITATIVA DEL TRATAMIENTO
+    # --------------------------------------------------
+
     poblacion_inicial = ninfas_inicial + adultos_inicial
-poblacion_final = N[-1] + A[-1]
+    poblacion_final = N[-1] + A[-1]
 
-if poblacion_inicial > 0:
-    eliminacion = (1 - poblacion_final / poblacion_inicial) * 100
-else:
-    eliminacion = 100.0
+    if poblacion_inicial > 0:
+        eliminacion = (1 - poblacion_final / poblacion_inicial) * 100
+    else:
+        eliminacion = 100.0
 
-st.subheader("📊 Evaluación del tratamiento")
+    st.subheader("📊 Evaluación del tratamiento")
 
-st.metric(
-    label="Eliminación poblacional alcanzada",
-    value=f"{eliminacion:.2f} %"
-)
+    st.metric(
+        label="Eliminación poblacional alcanzada",
+        value=f"{eliminacion:.2f} %"
+    )
 
-if eliminacion >= 99.5:
-    st.success("✅ Eliminación poblacional efectiva – descontaminación lograda")
-elif eliminacion >= 95:
-    st.success("🟢 Control avanzado – sistema poblacional colapsado")
-elif eliminacion >= 80:
-    st.warning("🟡 Control funcional – población residual activa")
-elif eliminacion >= 50:
-    st.warning("🟠 Reducción significativa – fase madura del tratamiento")
-else:
-    st.error("🔴 Tratamiento en fase temprana – presión insuficiente")
+    if eliminacion >= 99.5:
+        st.success("✅ Eliminación poblacional efectiva – descontaminación lograda")
+    elif eliminacion >= 95:
+        st.success("🟢 Control avanzado – sistema poblacional colapsado")
+    elif eliminacion >= 80:
+        st.warning("🟡 Control funcional – población residual activa")
+    elif eliminacion >= 50:
+        st.warning("🟠 Reducción significativa – fase madura del tratamiento")
+    else:
+        st.error("🔴 Tratamiento en fase temprana – presión insuficiente")
 
 
