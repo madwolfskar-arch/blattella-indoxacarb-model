@@ -194,16 +194,29 @@ if st.sidebar.button("▶ Ejecutar simulación"):
 
     t = np.arange(dias)
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(t, N, label="Ninfas", linewidth=2)
-    ax.plot(t, A, label="Adultos", linewidth=2)
-    ax.set_xlabel("Días")
-    ax.set_ylabel("Individuos")
-    ax.set_title("Dinámica poblacional de Blattella germanica")
-    ax.legend()
-    ax.grid(True)
+   # ----------------------------------
+# GRÁFICA POBLACIONAL INTEGRADA
+# ----------------------------------
 
-    st.pyplot(fig)
+poblacion_total = N + A
+
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.plot(
+    t,
+    poblacion_total,
+    linewidth=3,
+    color="darkred",
+    label="Población total activa"
+)
+
+ax.set_xlabel("Días")
+ax.set_ylabel("Individuos")
+ax.set_title("📉 Respuesta poblacional integrada al tratamiento")
+ax.legend()
+ax.grid(True)
+
+st.pyplot(fig)
+
 
     # --------------------------------------------------
     # EVALUACIÓN CUANTITATIVA DEL TRATAMIENTO
@@ -234,5 +247,6 @@ if st.sidebar.button("▶ Ejecutar simulación"):
         st.warning("🟠 Reducción significativa – fase madura del tratamiento")
     else:
         st.error("🔴 Tratamiento en fase temprana – presión insuficiente")
+
 
 
