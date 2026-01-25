@@ -12,8 +12,8 @@ st.set_page_config(
 
 st.title("🪳 Modelo poblacional de Blattella germanica")
 st.caption(
-    "Simulación ecológica del control poblacional con indoxacarb\n"
-    "Desarrollado bajo criterios biológicos y de campo – ZODION Servicios Ambientales"
+    "Modelo ecológico aplicado al control poblacional con indoxacarb\n"
+    "Basado en biología, ecología y experiencia de campo – ZODION Servicios Ambientales"
 )
 
 # --------------------------------------------------
@@ -28,18 +28,47 @@ def factor_temperatura(T):
     elif 25 <= T <= 33:
         return 1.0
     elif 33 < T <= 38:
-        return max(0.2, 1 - (T - 33) / 5)
+        return max(0.3, 1 - (T - 33) / 6)
     else:
         return 0.0
 
 
 def factor_humedad(H):
     if H < 30:
-        return 0.1
+        return 0.2
     elif 30 <= H <= 70:
         return 1.0
     else:
-        return max(0.3, 1 - (H - 70) / 30)
+        return max(0.4, 1 - (H - 70) / 40)
+
+
+def fraccion_accesible(poblacion):
+    """
+    Límite biológico: fracción máxima diaria de individuos
+    que pueden entrar en contacto efectivo con el tratamiento
+    """
+    if poblacion < 50:
+        return 0.30
+    elif poblacion < 500:
+        return 0.18
+    elif poblacion < 2000:
+        return 0.10
+    elif poblacion < 5000:
+        return 0.05
+    else:
+        return 0.03
+
+
+def factor_proinsecticida(dia):
+    """
+    Indoxacarb: activación metabólica progresiva
+    """
+    if dia < 5:
+        return 0.15
+    elif 5 <= dia < 15:
+        return 0.15 + (dia - 5) * 0.05
+    else:
+        return 0.65
 
 
 # --------------------------------------------------
@@ -48,86 +77,66 @@ def factor_humedad(H):
 
 def simular_poblacion(
     dias,
-    ninfas_inicial,
-    adultos_inicial,
+    poblacion_inicial,
     temperatura,
     humedad,
     intensidad_tratamiento
 ):
 
-    N = np.zeros(dias)
-    A = np.zeros(dias)
+    P = np.zeros(dias)
     R = np.zeros(dias)
 
-    N[0] = ninfas_inicial
-    A[0] = adultos_inicial
-    R[0] = 1.0  # recursos iniciales normalizados
+    P[0] = poblacion_inicial
+    R[0] = 1.0
 
     fT = factor_temperatura(temperatura)
     fH = factor_humedad(humedad)
 
     for t in range(dias - 1):
 
-        poblacion_total = N[t] + A[t]
-        if poblacion_total < 1:
-            break
+        if P[t] < 1:
+            P[t + 1] = 0
+            continue
 
         # ------------------------------
-        # REPRODUCCIÓN
+        # REPRODUCCIÓN LIMITADA
         # ------------------------------
-        tasa_reproductiva_diaria = 0.002
-        ninfas_nuevas = (
-            A[t]
-            * tasa_reproductiva_diaria
-            * fT
-            * fH
-            * R[t]
-        )
+        tasa_reproductiva = 0.0015 * fT * fH * R[t]
+        nuevos = P[t] * tasa_reproductiva
 
         # ------------------------------
         # MORTALIDAD POR INDOXACARB
         # ------------------------------
-        efecto_gregario = np.log(1 + poblacion_total)
-        mortalidad_indox_ninfas = intensidad_tratamiento * 0.015 * efecto_gregario
-        mortalidad_indox_adultos = intensidad_tratamiento * 0.010 * efecto_gregario
+        Fa = fraccion_accesible(P[t])
+        efecto_metabolico = factor_proinsecticida(t)
+
+        mortalidad_indox = (
+            P[t]
+            * Fa
+            * intensidad_tratamiento
+            * efecto_metabolico
+        )
 
         # ------------------------------
         # MORTALIDAD NATURAL
         # ------------------------------
-        mortalidad_nat_ninfas = 0.008
-        mortalidad_nat_adultos = 0.005
+        mortalidad_natural = 0.004 * P[t]
 
         # ------------------------------
-        # TRANSICIÓN NINFA → ADULTO
+        # ACTUALIZACIÓN
         # ------------------------------
-        tasa_maduracion = 0.02
-        nuevos_adultos = N[t] * tasa_maduracion
-
-        # ------------------------------
-        # ACTUALIZACIÓN POBLACIONAL
-        # ------------------------------
-        N[t + 1] = max(
+        P[t + 1] = max(
             0,
-            N[t]
-            + ninfas_nuevas
-            - (mortalidad_indox_ninfas + mortalidad_nat_ninfas) * N[t]
-            - nuevos_adultos
-        )
-
-        A[t + 1] = max(
-            0,
-            A[t]
-            + nuevos_adultos
-            - (mortalidad_indox_adultos + mortalidad_nat_adultos) * A[t]
+            P[t] + nuevos - mortalidad_indox - mortalidad_natural
         )
 
         # ------------------------------
         # CONSUMO DE RECURSOS
         # ------------------------------
-        consumo = 0.0000015 * A[t] + 0.0000008 * N[t]
-        R[t + 1] = max(0, R[t] - consumo)
+        consumo = 0.0000012 * P[t]
+        R[t + 1] = max(0.2, R[t] - consumo)
 
-    return N, A, R
+    return P
 
 
 # --------------------------------------------------
@@ -136,18 +145,11 @@ def simular_poblacion(
 
 st.sidebar.header("🔧 Parámetros del escenario")
 
-ninfas_inicial = st.sidebar.number_input(
-    "Ninfas iniciales",
-    min_value=0,
-    max_value=1_000_000,
+poblacion_inicial = st.sidebar.number_input(
+    "Población inicial estimada (individuos)",
+    min_value=5,
+    max_value=5000,
     value=500
-)
-
-adultos_inicial = st.sidebar.number_input(
-    "Adultos iniciales",
-    min_value=0,
-    max_value=1_000_000,
-    value=200
 )
 
 temperatura = st.sidebar.slider(
@@ -159,16 +161,16 @@ temperatura = st.sidebar.slider(
 
 humedad = st.sidebar.slider(
     "Humedad relativa (%)",
-    min_value=10,
+    min_value=20,
     max_value=90,
     value=60
 )
 
 intensidad = st.sidebar.slider(
     "Intensidad del tratamiento (indoxacarb)",
-    min_value=0.1,
-    max_value=1.0,
-    value=0.8
+    min_value=0.10,
+    max_value=0.85,
+    value=0.60
 )
 
 dias = st.sidebar.slider(
@@ -184,10 +186,9 @@ dias = st.sidebar.slider(
 
 if st.sidebar.button("▶ Ejecutar simulación"):
 
-    N, A, R = simular_poblacion(
+    P = simular_poblacion(
         dias,
-        ninfas_inicial,
-        adultos_inicial,
+        poblacion_inicial,
         temperatura,
         humedad,
         intensidad
@@ -195,57 +196,39 @@ if st.sidebar.button("▶ Ejecutar simulación"):
 
     t = np.arange(dias)
 
-    # ----------------------------------
-    # GRÁFICA POBLACIONAL INTEGRADA
-    # ----------------------------------
-    poblacion_total = N + A
-
+    # ------------------------------
+    # GRÁFICA INTEGRADA
+    # ------------------------------
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(
-        t,
-        poblacion_total,
-        linewidth=3,
-        color="darkred",
-        label="Población total activa"
-    )
-
+    ax.plot(t, P, linewidth=3, color="darkred")
     ax.set_xlabel("Días")
     ax.set_ylabel("Individuos")
     ax.set_title("📉 Respuesta poblacional integrada al tratamiento")
-    ax.legend()
     ax.grid(True)
 
     st.pyplot(fig)
 
-    # --------------------------------------------------
-    # EVALUACIÓN CUANTITATIVA DEL TRATAMIENTO
-    # --------------------------------------------------
-    poblacion_inicial = ninfas_inicial + adultos_inicial
-    poblacion_final = poblacion_total[-1]
-
-    if poblacion_inicial > 0:
-        eliminacion = (1 - poblacion_final / poblacion_inicial) * 100
-    else:
-        eliminacion = 100.0
+    # ------------------------------
+    # EVALUACIÓN CUANTITATIVA
+    # ------------------------------
+    eliminacion = (1 - P[-1] / poblacion_inicial) * 100
 
     st.subheader("📊 Evaluación del tratamiento")
 
     st.metric(
-        label="Eliminación poblacional alcanzada",
-        value=f"{eliminacion:.2f} %"
+        "Eliminación poblacional alcanzada",
+        f"{eliminacion:.2f} %"
     )
 
-    if eliminacion >= 99.5:
+    if eliminacion >= 99:
         st.success("✅ Eliminación poblacional efectiva – descontaminación lograda")
     elif eliminacion >= 95:
-        st.success("🟢 Control avanzado – sistema poblacional colapsado")
+        st.success("🟢 Control avanzado – colapso poblacional")
     elif eliminacion >= 80:
         st.warning("🟡 Control funcional – población residual activa")
     elif eliminacion >= 50:
-        st.warning("🟠 Reducción significativa – fase madura del tratamiento")
+        st.warning("🟠 Reducción significativa – tratamiento en fase madura")
     else:
-        st.error("🔴 Tratamiento en fase temprana – presión insuficiente")
-
-
+        st.error("🔴 Presión insuficiente – tratamiento en fase temprana")
 
 
