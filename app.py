@@ -73,9 +73,9 @@ def simular_poblacion(
             break
 
         # ------------------------------
-        # REPRODUCCIÓN (limitada)
+        # REPRODUCCIÓN
         # ------------------------------
-        tasa_reproductiva_diaria = 0.002  # equivalente biológico estable
+        tasa_reproductiva_diaria = 0.002
         ninfas_nuevas = (
             A[t]
             * tasa_reproductiva_diaria
@@ -181,6 +181,7 @@ dias = st.sidebar.slider(
 # --------------------------------------------------
 # EJECUCIÓN
 # --------------------------------------------------
+
 if st.sidebar.button("▶ Ejecutar simulación"):
 
     N, A, R = simular_poblacion(
@@ -194,36 +195,33 @@ if st.sidebar.button("▶ Ejecutar simulación"):
 
     t = np.arange(dias)
 
-   # ----------------------------------
-# GRÁFICA POBLACIONAL INTEGRADA
-# ----------------------------------
+    # ----------------------------------
+    # GRÁFICA POBLACIONAL INTEGRADA
+    # ----------------------------------
+    poblacion_total = N + A
 
-poblacion_total = N + A
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(
+        t,
+        poblacion_total,
+        linewidth=3,
+        color="darkred",
+        label="Población total activa"
+    )
 
-fig, ax = plt.subplots(figsize=(10, 5))
-ax.plot(
-    t,
-    poblacion_total,
-    linewidth=3,
-    color="darkred",
-    label="Población total activa"
-)
+    ax.set_xlabel("Días")
+    ax.set_ylabel("Individuos")
+    ax.set_title("📉 Respuesta poblacional integrada al tratamiento")
+    ax.legend()
+    ax.grid(True)
 
-ax.set_xlabel("Días")
-ax.set_ylabel("Individuos")
-ax.set_title("📉 Respuesta poblacional integrada al tratamiento")
-ax.legend()
-ax.grid(True)
-
-st.pyplot(fig)
-
+    st.pyplot(fig)
 
     # --------------------------------------------------
     # EVALUACIÓN CUANTITATIVA DEL TRATAMIENTO
     # --------------------------------------------------
-
     poblacion_inicial = ninfas_inicial + adultos_inicial
-    poblacion_final = N[-1] + A[-1]
+    poblacion_final = poblacion_total[-1]
 
     if poblacion_inicial > 0:
         eliminacion = (1 - poblacion_final / poblacion_inicial) * 100
@@ -247,6 +245,7 @@ st.pyplot(fig)
         st.warning("🟠 Reducción significativa – fase madura del tratamiento")
     else:
         st.error("🔴 Tratamiento en fase temprana – presión insuficiente")
+
 
 
 
