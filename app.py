@@ -206,10 +206,30 @@ if st.sidebar.button("▶ Ejecutar simulación"):
 
     st.pyplot(fig)
 
-    if N[-1] + A[-1] < 1:
-        st.success("✅ Control poblacional completo logrado")
-    elif R[-1] < 0.1:
-        st.warning("⚠️ Recursos agotados – riesgo bajo de recuperación")
-    else:
-        st.info("ℹ️ Población controlada pero aún activa")
+    poblacion_inicial = ninfas_inicial + adultos_inicial
+poblacion_final = N[-1] + A[-1]
+
+if poblacion_inicial > 0:
+    eliminacion = (1 - poblacion_final / poblacion_inicial) * 100
+else:
+    eliminacion = 100.0
+
+st.subheader("📊 Evaluación del tratamiento")
+
+st.metric(
+    label="Eliminación poblacional alcanzada",
+    value=f"{eliminacion:.2f} %"
+)
+
+if eliminacion >= 99.5:
+    st.success("✅ Eliminación poblacional efectiva – descontaminación lograda")
+elif eliminacion >= 95:
+    st.success("🟢 Control avanzado – sistema poblacional colapsado")
+elif eliminacion >= 80:
+    st.warning("🟡 Control funcional – población residual activa")
+elif eliminacion >= 50:
+    st.warning("🟠 Reducción significativa – fase madura del tratamiento")
+else:
+    st.error("🔴 Tratamiento en fase temprana – presión insuficiente")
+
 
