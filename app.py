@@ -2,233 +2,117 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 
-# --------------------------------------------------
-# CONFIGURACIÓN GENERAL
-# --------------------------------------------------
-st.set_page_config(
-    page_title="Modelo poblacional Blattella germanica – Indoxacarb",
-    layout="wide"
-)
+# =========================================================
+# CONFIGURACIÓN Y ESTILO ZODION
+# =========================================================
+st.set_page_config(page_title="ZODION - Modelo Blattella Pro", layout="centered")
 
-st.title("🪳 Modelo poblacional de Blattella germanica")
-st.caption(
-    "Modelo ecológico aplicado al control poblacional con indoxacarb\n"
-    "Basado en biología, ecología y experiencia de campo – ZODION Servicios Ambientales"
-)
+st.markdown("""
+    <style>
+    div.stButton > button:first-child {
+        background-color: #1f77b4;
+        color: white;
+        border-radius: 10px;
+        font-weight: bold;
+        width: 100%;
+    }
+    .main { background-color: #f9f9f9; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --------------------------------------------------
+st.title("🪳 Modelo Biológico: *Blattella germanica*")
+st.subheader("Simulación de Persistencia de Juveniles – ZODION")
+
+# =========================================================
 # FUNCIONES ECOLÓGICAS
-# --------------------------------------------------
+# =========================================================
+def factor_ambiental(T, H):
+    # Temperatura óptima 28-30°C
+    fT = 1.0 if 25 <= T <= 33 else max(0.1, 1 - abs(T - 30) / 15)
+    # Humedad óptima 60-70%
+    fH = 1.0 if 50 <= H <= 80 else max(0.2, 1 - abs(H - 65) / 35)
+    return fT, fH
 
-def factor_temperatura(T):
-    if T < 10:
-        return 0.0
-    elif 10 <= T < 25:
-        return (T - 10) / 15
-    elif 25 <= T <= 33:
-        return 1.0
-    elif 33 < T <= 38:
-        return max(0.3, 1 - (T - 33) / 6)
-    else:
-        return 0.0
+# =========================================================
+# BARRA LATERAL (INPUTS)
+# =========================================================
+st.sidebar.header("⚙️ Parámetros de Campo")
+temp = st.sidebar.slider("Temperatura promedio (°C)", 10, 45, 28)
+hum = st.sidebar.slider("Humedad Relativa (%)", 20, 100, 60)
+st.sidebar.divider()
+n_ini = st.sidebar.number_input("Ninfas iniciales (estimadas)", value=500)
+a_ini = st.sidebar.number_input("Adultos iniciales (estimados)", value=200)
+trat = st.sidebar.select_slider("Intensidad de Tratamiento (Indoxacarb)", 
+                               options=[0.1, 0.3, 0.5, 0.8, 1.0], value=0.8)
+dias_sim = st.sidebar.slider("Días de seguimiento", 30, 180, 120)
 
-
-def factor_humedad(H):
-    if H < 30:
-        return 0.2
-    elif 30 <= H <= 70:
-        return 1.0
-    else:
-        return max(0.4, 1 - (H - 70) / 40)
-
-
-def fraccion_accesible(poblacion):
-    """
-    Límite biológico: fracción máxima diaria de individuos
-    que pueden entrar en contacto efectivo con el tratamiento
-    """
-    if poblacion < 50:
-        return 0.30
-    elif poblacion < 500:
-        return 0.18
-    elif poblacion < 2000:
-        return 0.10
-    elif poblacion < 5000:
-        return 0.05
-    else:
-        return 0.03
-
-
-def factor_proinsecticida(dia):
-    """
-    Indoxacarb: activación metabólica progresiva
-    """
-    if dia < 5:
-        return 0.15
-    elif 5 <= dia < 15:
-        return 0.15 + (dia - 5) * 0.05
-    else:
-        return 0.65
-
-
-# --------------------------------------------------
-# SIMULACIÓN PRINCIPAL
-# --------------------------------------------------
-
-def simular_poblacion(
-    dias,
-    poblacion_inicial,
-    temperatura,
-    humedad,
-    intensidad_tratamiento
-):
-
-    P = np.zeros(dias)
-    R = np.zeros(dias)
-
-    P[0] = poblacion_inicial
-    R[0] = 1.0
-
-    fT = factor_temperatura(temperatura)
-    fH = factor_humedad(humedad)
+# =========================================================
+# MOTOR DE SIMULACIÓN (LÓGICA DE PERSISTENCIA)
+# =========================================================
+def ejecutar_modelo(dias, n_inicial, a_inicial, T, H, intensidad):
+    N = np.zeros(dias)
+    A = np.zeros(dias)
+    banco_ootecas = np.zeros(dias + 60)
+    
+    N[0] = n_inicial
+    A[0] = a_inicial
+    
+    fT, fH = factor_ambiental(T, H)
+    
+    # El calor acelera la eclosión (biología real)
+    retraso_eclosion = int(28 / (0.6 + 0.4 * fT))
+    
+    # Carga inicial de ootecas ya presentes en el sitio
+    for i in range(retraso_eclosion):
+        banco_ootecas[i] = (a_inicial * 0.25) * 35 # 25% hembras con ooteca
 
     for t in range(dias - 1):
+        # 1. Nuevas Ootecas (Puestas por adultos vivos)
+        futura_eclosion = t + retraso_eclosion
+        if futura_eclosion < len(banco_ootecas):
+            banco_ootecas[futura_eclosion] += A[t] * (0.12 * fT * fH) * 35
 
-        if P[t] < 1:
-            P[t + 1] = 0
-            continue
+        # 2. Eclosión (Ninfas nuevas hoy)
+        emergentes = banco_ootecas[t]
 
-        # ------------------------------
-        # REPRODUCCIÓN LIMITADA
-        # ------------------------------
-        tasa_reproductiva = 0.0015 * fT * fH * R[t]
-        nuevos = P[t] * tasa_reproductiva
+        # 3. Mortalidad (Diferenciada según tu observación)
+        # Adultos mueren más rápido. Juveniles resisten por refugio/coprofagia.
+        m_adultos = intensidad * 0.12 * fT
+        m_ninfas = intensidad * 0.04 * fT # Tasa menor para ninfas
 
-        # ------------------------------
-        # MORTALIDAD POR INDOXACARB
-        # ------------------------------
-        Fa = fraccion_accesible(P[t])
-        efecto_metabolico = factor_proinsecticida(t)
+        # 4. Maduración (Ninfas pasan a Adultos)
+        maduracion = N[t] * (0.02 * fT)
 
-        mortalidad_indox = (
-            P[t]
-            * Fa
-            * intensidad_tratamiento
-            * efecto_metabolico
-        )
+        # 5. Evolución poblacional
+        N[t+1] = max(0, N[t] + emergentes - (m_ninfas + 0.01) * N[t] - maduracion)
+        A[t+1] = max(0, A[t] + maduracion - (m_adultos + 0.005) * A[t])
+        
+    return N, A
 
-        # ------------------------------
-        # MORTALIDAD NATURAL
-        # ------------------------------
-        mortalidad_natural = 0.004 * P[t]
+# =========================================================
+# RESULTADOS
+# =========================================================
+if st.button("🚀 Iniciar Simulación Biológica"):
+    N, A = ejecutar_modelo(dias_sim, n_ini, a_ini, temp, hum, trat)
+    t_axis = np.arange(dias_sim)
 
-        # ------------------------------
-        # ACTUALIZACIÓN
-        # ------------------------------
-        P[t + 1] = max(
-            0,
-            P[t] + nuevos - mortalidad_indox - mortalidad_natural
-        )
-
-        # ------------------------------
-        # CONSUMO DE RECURSOS
-        # ------------------------------
-        consumo = 0.0000012 * P[t]
-        R[t + 1] = max(0.2, R[t] - consumo)
-
-    return P
-
-
-# --------------------------------------------------
-# INTERFAZ STREAMLIT
-# --------------------------------------------------
-
-st.sidebar.header("🔧 Parámetros del escenario")
-
-poblacion_inicial = st.sidebar.number_input(
-    "Población inicial estimada (individuos)",
-    min_value=5,
-    max_value=5000,
-    value=500
-)
-
-temperatura = st.sidebar.slider(
-    "Temperatura (°C)",
-    min_value=5,
-    max_value=38,
-    value=28
-)
-
-humedad = st.sidebar.slider(
-    "Humedad relativa (%)",
-    min_value=20,
-    max_value=90,
-    value=60
-)
-
-intensidad = st.sidebar.slider(
-    "Intensidad del tratamiento (indoxacarb)",
-    min_value=0.10,
-    max_value=0.85,
-    value=0.60
-)
-
-dias = st.sidebar.slider(
-    "Duración del tratamiento (días)",
-    min_value=30,
-    max_value=240,
-    value=120
-)
-
-# --------------------------------------------------
-# EJECUCIÓN
-# --------------------------------------------------
-
-if st.sidebar.button("▶ Ejecutar simulación"):
-
-    P = simular_poblacion(
-        dias,
-        poblacion_inicial,
-        temperatura,
-        humedad,
-        intensidad
-    )
-
-    t = np.arange(dias)
-
-    # ------------------------------
-    # GRÁFICA INTEGRADA
-    # ------------------------------
+    # Gráfica Profesional
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(t, P, linewidth=3, color="darkred")
-    ax.set_xlabel("Días")
-    ax.set_ylabel("Individuos")
-    ax.set_title("📉 Respuesta poblacional integrada al tratamiento")
-    ax.grid(True)
-
+    ax.fill_between(t_axis, N, color="orange", alpha=0.2, label="Área de Juveniles")
+    ax.plot(t_axis, N, color="darkorange", linewidth=2.5, label="Ninfas (Reposición)")
+    ax.plot(t_axis, A, color="green", linewidth=2, label="Adultos")
+    
+    ax.set_title(f"Dinámica Poblacional - ZODION\n(Persistencia detectada a {temp}°C)")
+    ax.set_xlabel("Días post-tratamiento")
+    ax.set_ylabel("Cantidad de individuos")
+    ax.legend()
+    ax.grid(True, alpha=0.2)
     st.pyplot(fig)
 
-    # ------------------------------
-    # EVALUACIÓN CUANTITATIVA
-    # ------------------------------
-    eliminacion = (1 - P[-1] / poblacion_inicial) * 100
-
-    st.subheader("📊 Evaluación del tratamiento")
-
-    st.metric(
-        "Eliminación poblacional alcanzada",
-        f"{eliminacion:.2f} %"
-    )
-
-    if eliminacion >= 99:
-        st.success("✅ Eliminación poblacional efectiva – descontaminación lograda")
-    elif eliminacion >= 95:
-        st.success("🟢 Control avanzado – colapso poblacional")
-    elif eliminacion >= 80:
-        st.warning("🟡 Control funcional – población residual activa")
-    elif eliminacion >= 50:
-        st.warning("🟠 Reducción significativa – tratamiento en fase madura")
+    # Alerta Técnica
+    if N[-1] > (n_ini * 0.1):
+        st.warning(f"⚠️ **Observación Técnica:** A los {dias_sim} días persiste un {int((N[-1]/n_ini)*100)}% de juveniles. Esto coincide con la reposición por eclosión de ootecas protegidas.")
     else:
-        st.error("🔴 Presión insuficiente – tratamiento en fase temprana")
-
-
+        st.success("✅ Control proyectado exitoso bajo estas condiciones.")
+    
+    st.info("💡 **Nota de ZODION:** El Indoxacarb elimina eficazmente adultos, pero la eclosión de ninfas requiere monitoreo continuo hasta agotar el banco de ootecas.")
